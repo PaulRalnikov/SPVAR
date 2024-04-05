@@ -23,7 +23,6 @@ def spvar(h,
 
     samples = generate_sample(Q, sample_size, anneal_duration)
     samples.sort()
-    # samples.reverse()
     samples = samples[:int(sample_size * elite_threshold)]
 
     new_sample_size = len(samples)
@@ -88,7 +87,7 @@ def test_spvar(h,
                fixing_threshold,
                elite_threshold,
                anneal_duration_one,
-               anneal_duration_many) -> tuple[float, float]:
+               anneal_duration_many) -> tuple[float, float, int]:
     (Q, _) = dimod.ising_to_qubo(h, J)
 
     solution_old = generate_sample(Q, 1, anneal_duration_one).best
@@ -107,12 +106,15 @@ def test_spvar(h,
 
     state_new = solutionNew.state
 
+    cnt_fixed = 0
+
     for v in fixed:
         state_new[v] = 0 if fixed[v] == -1 else 1
+        cnt_fixed += 1
 
     before = solution_old.value
     after = qubovert.utils.QUBOMatrix(Q).value(state_new)
-    return (before, after)
+    return (before, after, cnt_fixed)
 
 def test_criteria(sample_size,
                   fixing_threshold,
@@ -149,8 +151,11 @@ def test_criteria(sample_size,
         print(f"start test {testPath}")
         path = "Gset/" + testPath
         (h, J, _) = read_ising_from_file(path)
+
+        sz = len(h)
+
         best_known = best_known_energy[testPath]
-        (before, after) = test_spvar(
+        (before, after, cnt_fixed) = test_spvar(
             h,
             J,
             sample_size,
@@ -166,6 +171,7 @@ def test_criteria(sample_size,
         results.append([
             before,
             after,
+            str(cnt_fixed / sz * 100) + '%',
             best_known,
             str(round((before - best_known) / best_known * 100, 1)) + '%',
             str(round((after - best_known) / best_known * 100, 1)) + '%',  
@@ -186,6 +192,7 @@ def test_criteria(sample_size,
             columns = [
                 "result before SPVAR",
                 "result after SPVAR",
+                "percent fixed varables",
                 "best known",
                 "(before - best) / best",
                 "(after - best) / best",
@@ -196,16 +203,5 @@ def test_criteria(sample_size,
     )
     f.write("===================================================================================================================================\n")
     f.close()
-    
 
-test_criteria(1000, 1.0, 0.1, 1000, 1000)
-test_criteria(1000, 1.0, 0.2, 1000, 1000)
-test_criteria(1000, 1.0, 0.3, 1000, 1000)
-test_criteria(1000, 1.0, 0.4, 1000, 1000)
-test_criteria(1000, 1.0, 0.5, 1000, 1000)
-test_criteria(1000, 1.0, 0.6, 1000, 1000)
-test_criteria(1000, 1.0, 0.7, 1000, 1000)
-test_criteria(1000, 1.0, 0.8, 1000, 1000)
-test_criteria(1000, 1.0, 0.9, 1000, 1000)
-test_criteria(1000, 1.0, 1.0, 1000, 1000)
-    
+
