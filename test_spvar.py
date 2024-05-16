@@ -229,6 +229,8 @@ def test_different_num_anneals(
 
 def main():
 
+    # sample of using:
+
     data_dir = "test_data\\qubo_matrices"
     results_dir = "test_results\\old"
 
@@ -250,35 +252,6 @@ def main():
     test_different_num_anneals(1000, range(100, 1000, 100), 0.1, 0.2,
                                f"{results_dir}\\test_1000_0.1_0.2", data_dir, True)
     
-    # log_arg_data = "test_data\\big_log_arc"
-    # biggest_data = "test_data\\biggest_log_arc"
-
-    # log_arg_results = "test_results\\log_arc"
-    
-    # biggest_results = "test_results\\biggest_log_arc"
-
-    # test_different_num_anneals(200, range(100, 200, 10), 0.0, 0.1,
-    #                            f"{log_arg_results}\\test_200_0.0_0.1", log_arg_data, True)
-
-    # test_different_num_anneals(500, range(100, 500, 50), 0.0, 0.1,
-    #                            f"{log_arg_results}\\test_500_0.0_0.1", log_arg_data, True)
-    
-    # test_different_num_anneals(1000, range(100, 1000, 100), 0.0, 0.1,
-    #                            f"{log_arg_results}\\test_1000_0.0_0.1", log_arg_data, True)
-
-    # test_different_num_anneals(500, range(100, 500, 50), 0.0, 0.2,
-    #                            f"{biggest_results}\\test_500_0.0_0.2", log_arg_data, True)
-
-    # test_different_num_anneals(500, range(100, 500, 50), 0.1, 0.1,
-    #                            f"{biggest_results}\\test_500_0.1_0.1", biggest_data, True)
-
-    # test_different_num_anneals(500, range(100, 500, 50), 0.1, 0.2,
-    #                            f"{biggest_results}\\test_500_0.1_0.2", biggest_data, True)
-    
-    # test_different_num_anneals(1000, range(100, 1000, 100), 0.1, 0.1,
-    #                            f"{biggest_results}\\test_1000_0.1_0.1", biggest_data, True)
-
-
     
 
 main()
