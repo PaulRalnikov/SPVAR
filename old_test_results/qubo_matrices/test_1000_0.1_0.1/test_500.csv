@@ -1,0 +1,16 @@
+,Result without SPVAR,Result with SPVAR,% fixed vars
+
+knapsack_20.csv,-4988.0,-4980.0,7.9
+
+knapsack_70.csv,-818.0,-818.0,16.5
+
+log_arc_1.csv,-284.0,-284.0,54.5
+
+log_arc_2.csv,-168.0,-168.0,53.7
+
+log_seq_0.csv,-640.0,-640.0,82.9
+
+log_seq_1.csv,-564.0,-564.0,83.3
+
+log_seq_2.csv,-564.0,-564.0,83.3
+
