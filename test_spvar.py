@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 import spvar
-import io_maxcut
-import dimod
+import read_matrices
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,249 +8,197 @@ from functools import *
 import os
 from math import *
 
-# Returns tuple[h, J, offset]
-def read_ising_from_Gset_file(path : str) -> tuple[dict, dict, int]:
-    g = io_maxcut.read_gset_graph(path)
-    Q_mat = io_maxcut.graph_to_qubo(g)
-    shape = Q_mat.shape
+DIR_OLD_RESULTS = "old_test_results"
+DIR_RESULTS = "test_results"
+DIR_DATA = "test_data"
 
-    Q_dict = dict()    
-    for i in range(shape[0]):
-        for j in range(shape[1]):
-            Q_dict[(i, j)] = Q_mat[i][j]
+# draws diagram by results (.csv files) in directory dir_results
+# plot will be places in dir_results
+def draw_plot(dir_results : str):
+    files = []
 
-    return dimod.qubo_to_ising(Q_dict)
+    for file in os.listdir(dir_results):
+        if (os.path.splitext(file)[1] == ".csv"):
+            files.append(file)
+    files.sort()
+    sz = len(files)
 
-#returns Q
-def read_qubo_from_csv_file(path : str) -> dict:
-    f = open(path, "r")
-    i = 0
-    Q = dict()
-    for line in f.readlines():
-        coefs = list(map(float, line.split(',')))
-        for j in range(len(coefs)):
-            Q[(i, j)] = coefs[j]
-        i += 1
-    return Q
-
-#Returns list of tuples [h, J, offset]
-def read_qubo_matrices(dir_name : str) -> list[tuple[str, dict, dict]]:
-    testPathes = io_maxcut.files_in_directory(dir_name)
-
-    result = []
-    for testPath in testPathes:
-        path = f"{dir_name}/" + testPath
-        Q = read_qubo_from_csv_file(path)
-        [h, J, _] = dimod.qubo_to_ising(Q)
-        result.append(tuple([testPath, h, J]))
-    
-    return result
-
-@dataclass
-class Test_honest_params:
-    total_num_anneals : int
-    SPVAR_num_anneals : int
-    fixing_threshhold : float
-    elite_threshold : float
-
-# Does tests from params and returns results in list of DataFrames
-# with columns [Result without SPVAR, Result with SPVAR, % fixed vars]
-def test_honest(params : list[Test_honest_params], dir_tests : str) -> list[pd.DataFrame]:    
-    tests = read_qubo_matrices(dir_tests)
-    results = []
-    names = [name for [name, _, _] in tests]
-    s = spvar.SPVAR()
-    for param in params:
-        print(f"start test {param}")
-        test_results = []
-        for [_, h, J] in tests:
-            num_vars = len(h.keys())
-            spvar_params = spvar.SPVAR_honest_params(
-                h,
-                J,
-                param.total_num_anneals,
-                param.SPVAR_num_anneals,
-                param.fixing_threshhold,
-                param.elite_threshold
-            )
-            [no_spvar_result, spvar_result, cnt_fixed] = s.test_honest(spvar_params)
-            test_results.append([no_spvar_result, spvar_result, round(cnt_fixed / num_vars * 100, 1)])
-
-        columns = ["Result without SPVAR", "Result with SPVAR", "% fixed vars"]
-
-        results.append(pd.DataFrame(test_results, index = names, columns=columns))
-    
-    return results
-
-# Draws diagrams by results of honest tests and puts it
-# to file results.pdf in directory dir_results
-# typical case of using:
-#     test_results = test_honest(...)
-#     draw_bars_by_honest_results(..., test_results)
-#
-def draw_bars_by_honest_results(
-        total_num_anneals : int,
-        SPVAR_num_anneals_range : range,
-        fixing_threshhold : float,
-        elite_threshold : float,
-        dir_results : str,
-        results : list[pd.DataFrame]
-        ):
-    
-    if len(results) == 0:
-        print("No results:(")
-        return
-
-    test_names = results[0].index
-
-    sz = len(test_names)
-    
     plt.rcParams.update({'font.size': 21})
     fig, axs = plt.subplots(2, sz, figsize=(15 * sz, 25))
 
-    plt.suptitle(f"params:\n" +
-                 f"total_num_anneals = {total_num_anneals}\n" +
-                 f"fixing_threshhold = {fixing_threshhold}\n" +
-                 f"elite_threshold = {elite_threshold}")
+    task_name = dir_results.split("\\")[-1]
+    plt.suptitle(f"Task {task_name}")
+    
+    for i in range(sz):
+        file = files[i]
+        splitted = os.path.splitext(file)[0].split("_")
 
-    for i in range (len(test_names)):
-        test_name = test_names[i]
+        total_num_anneals = int(splitted[0])
+        fixing_thereshold = float(splitted[1])
+        elite_thereshhold = float(splitted[2])
 
-        columns = ["Result without SPVAR", "Result with SPVAR", "% fixed vars"]
+        file_path = dir_results + "\\" + file
+        frame = pd.read_csv(file_path, header = 0, index_col = 0)
+        index = frame["SPVAR num anneals"].to_list()
+        
+        start_range = index[0]
+        last_range = index[-1]
+        index_sz = len(index)
+        step = 0 if sz == 0 else (last_range - start_range) / (index_sz - 1)
 
-        data = {res : np.array([el.loc[test_name, res] for el in results]) for res in columns}
-        data["SPVAR number anneals"] = list(SPVAR_num_anneals_range)
-        frame = pd.DataFrame(data)
-
-        x = frame["SPVAR number anneals"]
+        x = index
         y = (frame["Result with SPVAR"] - frame["Result without SPVAR"]) / np.abs(frame["Result without SPVAR"]) * 100
-
         ax = axs[0] if sz == 1 else axs[0, i]
+        width = step / 3
 
-        ax.bar(x, y, width=SPVAR_num_anneals_range.step / 5)
+        ax.bar(x, y, width=width)
         ax.set_ylabel("Growth of target function in %")
         ax.set_xlabel("SPVAR number anneals")
-        ax.set_title(test_name, pad=30)
-
-        last = SPVAR_num_anneals_range.start
-        for el in SPVAR_num_anneals_range:
-            last = el
-
+        ax.set_title(f"params:\n"+
+                     f"total_num_anneals = {total_num_anneals},\n"
+                     f"fixing_thereshold = {fixing_thereshold},\n"
+                     f"elite_thereshhold = {elite_thereshhold},",
+                     pad=30)
         ax.hlines(
             y = 0,
-            xmin=SPVAR_num_anneals_range.start,
-            xmax=last
+            xmin=start_range,
+            xmax=last_range
         )
         
         for container in ax.containers:
             ax.bar_label(container, fmt='%.1f')
-
-
+            
         ax = axs[1] if sz == 1 else axs[1, i]
 
-        x = frame["SPVAR number anneals"]
+        x = frame["SPVAR num anneals"]
         y = frame["% fixed vars"]
 
-        ax.bar(x, y, width=SPVAR_num_anneals_range.step / 5)
+        ax.bar(x, y, width=width)
         ax.set_ylabel("Percent of fixed vars")
         ax.set_xlabel("SPVAR number anneals")
-
         ax.hlines(
             y = 0,
-            xmin=SPVAR_num_anneals_range.start,
-            xmax=last
+            xmin=start_range,
+            xmax=last_range
         )
         
         for container in ax.containers:
             ax.bar_label(container, fmt='%.1f')        
-
-
+    
     plt.savefig(f"{dir_results}\\results.pdf")
     plt.close()
 
 # Does some honest tests with params [total_num_anneals, SPVAR_num_anneals, fixing_threshhold, elite_threshold]
-# and saves results to files with names test_{SPVAR_num_anneals}.csv in dir_results directory
+# and saves results to file named {total_num_anneals}_{fixing_threshold}_{elite_threshold}.csv in directory dir_results
 # (SPVAR_num_anneals is an element of SPVAR_num_anneals_range);
-# then draw bar charts by results and saves in to the dir_results directory.
-# Also, if cached = True, this function gets results of tests from corresponding files in dir_results directory
-# (in this case results of tests have to be placed in dir_results directory)
+# Also, if ignore_calced = False and csv file with results contains all nesesary information, it does not calc again
+# Is draw_bars = True, function draw bar chart by and saves in to the same directory.
 def test_different_num_anneals(
         total_num_anneals : int,
         SPVAR_num_anneals_range : range,
-        fixing_threshhold : float,
+        fixing_threshold : float,
         elite_threshold : float,
         dir_results : str,
-        dir_data : str,
-        cached : bool = False
-        ):
-    try:
-        path = os.path.join(os.path.dirname(__file__), dir_results)
-        os.mkdir(path)
-    except OSError:
-        pass
+        data_file_path : str,
+        ignore_calced : bool = False,
+        draw_bars : bool = True):
     
-    results = []
-    if cached:
-        results = [
-            pd.read_csv(f"{dir_results}\\test_{num}.csv", header=0, index_col=0)
-            for num in SPVAR_num_anneals_range
-        ]
-    else:
-        params = [
-            Test_honest_params(
-                total_num_anneals,
-                SPVAR_num_anneals,
-                fixing_threshhold,
-                elite_threshold
-            ) for SPVAR_num_anneals in SPVAR_num_anneals_range
-        ]
+    [h, J, _] = read_matrices.read_qubo_from_file(data_file_path)
+    num_vars = len(h.keys())
+    
+    params = [
+        spvar.SPVAR_test_honest_params
+        (
+            h,
+            J,
+            total_num_anneals,
+            SPVAR_num_anneals,
+            fixing_threshold,
+            elite_threshold
+        )
+        for SPVAR_num_anneals in SPVAR_num_anneals_range
+    ]
 
-        # test file exists
-        for i in range(len(params)):
-            fout = open(f"{dir_results}\\test_{params[i].SPVAR_num_anneals}.csv", 'a')
-            fout.close()
+    result_path = f"{dir_results}\\{total_num_anneals}_{round(fixing_threshold, 1)}_{round(elite_threshold, 1)}.csv"
+
+    if not ignore_calced and os.path.isfile(result_path):
+        df = pd.read_csv(result_path)
+        spvar_num_anneals_set = set(df["SPVAR num anneals"].to_list())
+        fl = True
+        for param in params:
+            if (param.SPVAR_num_anneals not in spvar_num_anneals_set):
+                fl = False
+                break
+        if fl:
+            if (draw_bars):
+                draw_plot(dir_results)
+            return
+
+    columns = ["SPVAR num anneals", "Result without SPVAR", "Result with SPVAR", "% fixed vars"]
+
+    df = pd.DataFrame(columns=columns)
+
+    for i in range(len(params)):
+        param = params[i]
+
+        s = spvar.SPVAR()
+        [without_SPVAR, with_SPVAR, cnt_fixed] = s.test_honest(param)
+        df.loc[i] = [param.SPVAR_num_anneals, without_SPVAR, with_SPVAR, round(cnt_fixed / num_vars * 100, 1)]
         
-        results = test_honest(params, dir_data)
+        fout = open(result_path, "w")
+        df.to_csv(fout)
+        fout.close()
+    
+    if draw_bars:
+        draw_plot(dir_results)
 
-        for i in range(len(params)):
-            fout = open(f"{dir_results}\\test_{params[i].SPVAR_num_anneals}.csv", 'w')
-            results[i].to_csv(fout)
-            fout.close()
+#Runs test_different_num_anneals with all params from params_list
+def test_multiple_params(params_list: list[tuple[int, range, float, float]],
+                         dir_results : str,
+                         data_file_path : str,
+                         ignore_calced : bool = False):
+    for (total_num_anneals, SPVAR_num_anneals_range, fixing_threshold, elite_threshold) in params_list:
+        test_different_num_anneals(
+            total_num_anneals,
+            SPVAR_num_anneals_range,
+            fixing_threshold,
+            elite_threshold,
+            dir_results,
+            data_file_path,
+            ignore_calced,
+            False
+        )
+        draw_plot(dir_results)
 
-    draw_bars_by_honest_results(
-        total_num_anneals,
-        SPVAR_num_anneals_range,
-        fixing_threshhold,
-        elite_threshold,
-        dir_results,
-        results
-    )    
-
+# Run test_multiple_params for all files from data_dir
+# Data_dir a relative path from directory test_data
+# Directory with results for file f.csv is {DIR_RESULTS}\\{data_dir}\\{f} 
+def test_multiple_params_over_directory(
+        params: list[tuple[int, range, float, float]],
+        data_dir : str):
+    data_path = DIR_DATA + "\\" + data_dir
+    results_path = DIR_RESULTS + "\\" + data_dir
+    for data_file in os.listdir(data_path):
+        data_file_path = data_path + "\\" + data_file
+        file_name, file_extention = os.path.splitext(data_file)
+        if (file_extention != ".csv"):
+            continue
+        results_file_dir = results_path + "\\" + file_name
+        try:
+            os.mkdir(results_file_dir)
+        except OSError:
+            pass
+        
+        test_multiple_params(params, results_file_dir, data_file_path)
 def main():
 
     # sample of using:
 
-    data_dir = "test_data\\qubo_matrices"
-    results_dir = "test_results\\old"
+    params = [
+        tuple([200, range(100, 200, 10), 0.0, 0.2]),
+        tuple([200, range(100, 200, 10), 0.1, 0.2]),
+    ]
 
-    test_different_num_anneals(200, range(100, 200, 10), 0.0, 0.2,
-                               f"{results_dir}\\test_200_0.0_0.2", data_dir, True)
-    
-    test_different_num_anneals(200, range(100, 200, 10), 0.1, 0.2,
-                               f"{results_dir}\\test_200_0.1_0.2", data_dir, True)
-    
-    test_different_num_anneals(1000, range(100, 1000, 100), 0.0, 0.1,
-                               f"{results_dir}\\test_1000_0.0_0.1", data_dir, True)
-    
-    test_different_num_anneals(1000, range(100, 1000, 100), 0.0, 0.2,
-                               f"{results_dir}\\test_1000_0.0_0.2", data_dir, True)
-    
-    test_different_num_anneals(1000, range(100, 1000, 100), 0.1, 0.1,
-                               f"{results_dir}\\test_1000_0.1_0.1", data_dir, True)
-
-    test_different_num_anneals(1000, range(100, 1000, 100), 0.1, 0.2,
-                               f"{results_dir}\\test_1000_0.1_0.2", data_dir, True)
-    
-    
+    test_multiple_params_over_directory(params, "qubo_matrices")
 
 main()
